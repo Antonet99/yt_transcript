@@ -2,7 +2,6 @@ import os
 import sqlite3
 import feedparser
 import requests
-from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from youtube_transcript_api.formatters import TextFormatter
 import google.generativeai as genai
@@ -21,7 +20,7 @@ DB_FILE = "channel_state.db"
 
 # Credenziali lette da GitHub Actions (Secrets)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID_DEV")
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
 
 # Configura il modello Gemini
@@ -38,12 +37,22 @@ def init_db():
     """Crea il database e la tabella se non esistono"""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS video_state (
-                    channel_id TEXT PRIMARY KEY,
-                    last_video_id TEXT
-                )''')
+
+    # Verifica se il database è vuoto o corrotto
+    try:
+        print("🔍 Controllo database SQLite...")
+        c.execute("SELECT * FROM video_state;")
+        result = c.fetchall()
+        print(f"✅ Database trovato con {len(result)} record.")
+    except sqlite3.DatabaseError as e:
+        print(f"⚠️ Database corrotto o vuoto. Verrà rigenerato. Errore: {str(e)}")
+        c.execute("DROP TABLE IF EXISTS video_state;")
+        c.execute("CREATE TABLE video_state (channel_id TEXT PRIMARY KEY, last_video_id TEXT);")
+        print("✅ Nuovo database creato.")
+
     conn.commit()
     conn.close()
+
 
 def get_last_video_id(channel_id):
     """Recupera l'ultimo video noto per un dato canale"""

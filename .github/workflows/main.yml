@@ -2,8 +2,8 @@ name: YouTube Monitor and Summary
 
 on:
   schedule:
-    - cron: "0 */3 * * *"  # Ogni 3 ore
-  workflow_dispatch:  # Permette di avviare il workflow manualmente
+    - cron: "0 */3 * * *" # Ogni 3 ore
+  workflow_dispatch: # Permette di avviare il workflow manualmente
 
 jobs:
   run-monitor:
@@ -11,9 +11,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  # Usa la versione aggiornata
+        uses: actions/checkout@v4
 
-      # 🔹 Tentativo di scaricare l'artifact se esiste, ma non fallire se non lo trova
+      # 🔹 Scarica l'ultimo database se esiste, ma non fallisce se non c'è
       - name: Check for existing SQLite Database
         id: check-artifact
         continue-on-error: true
@@ -22,11 +22,21 @@ jobs:
           name: channel-state-db
           path: .
 
-      # 🔹 Se l'artifact non esiste, crea un database SQLite vuoto
+      # 🔹 Verifica il contenuto del database SQLite
+      - name: Debug SQLite Database
+        run: |
+          if [ -f channel_state.db ]; then
+            echo "✅ Database trovato. Contenuto attuale:"
+            sqlite3 channel_state.db "SELECT * FROM video_state;" || echo "⚠️ Errore nel leggere il database"
+          else
+            echo "⚠️ Nessun database trovato. Verrà creato uno nuovo."
+          fi
+
+      # 🔹 Se il database non esiste o è corrotto, lo rigenera
       - name: Create SQLite Database if not found
         run: |
           if [ ! -f channel_state.db ]; then
-            echo "Database non trovato, creando un nuovo database SQLite..."
+            echo "⚠️ Creazione di un nuovo database SQLite..."
             sqlite3 channel_state.db "CREATE TABLE IF NOT EXISTS video_state (channel_id TEXT PRIMARY KEY, last_video_id TEXT);"
           fi
 
@@ -41,7 +51,7 @@ jobs:
       - name: Run script
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_DEV }}
           GENAI_API_KEY: ${{ secrets.GENAI_API_KEY }}
         run: python video_monitor.py
 
