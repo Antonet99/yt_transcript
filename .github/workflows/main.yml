@@ -1,0 +1,41 @@
+name: YouTube Monitor and Summary
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"  # Ogni 3 ore
+  workflow_dispatch:  # Permette di avviare il workflow manualmente
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3  # Corretto
+
+      - name: Restore SQLite Database (se esiste)
+        uses: actions/download-artifact@v3  # Corretto
+        with:
+          name: channel-state-db
+          path: .
+
+      - name: Setup Python
+        uses: actions/setup-python@v3  # Corretto
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GENAI_API_KEY: ${{ secrets.GENAI_API_KEY }}
+        run: python video_monitor.py
+
+      - name: Save SQLite Database
+        uses: actions/upload-artifact@v3  # Corretto
+        with:
+          name: channel-state-db
+          path: channel_state.db
