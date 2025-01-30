@@ -3,6 +3,7 @@ import sqlite3
 import feedparser
 import requests
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from youtube_transcript_api.formatters import TextFormatter
 import google.generativeai as genai
 
@@ -111,13 +112,22 @@ model = genai.GenerativeModel(model_name=MODEL,
                               system_instruction=SYSTEM_INSTRUCTION)
 
 def get_transcript(video_id, lang='it'):
-    """Scarica la trascrizione del video"""
+    """
+    Scarica la trascrizione del video, se disponibile.
+    Se non ci sono sottotitoli, restituisce None.
+    """
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang])
-    except:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+    except TranscriptsDisabled:
+        print(f"❌ Trascrizione non disponibile per il video: https://www.youtube.com/watch?v={video_id}")
+        return None
+    except Exception as e:
+        print(f"⚠️ Errore nel recuperare la trascrizione per {video_id}: {str(e)}")
+        return None
+    
     formatter = TextFormatter()
     return formatter.format_transcript(transcript)
+
 
 def get_summary(text):
     """Genera il riassunto tramite Gemini AI"""
@@ -134,11 +144,26 @@ def send_message_to_channel(text):
     requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": text})
 
 def process_new_video(video_info):
-    """Pipeline di elaborazione del video"""
+    """
+    Pipeline di elaborazione del video:
+      - Invia messaggio "nuovo video"
+      - Scarica trascrizione (se disponibile)
+      - Ottiene riassunto (se disponibile)
+      - Invia riassunto su Telegram
+    """
+    # 1. Avviso di nuovo video
     send_message_to_channel(f"📢 Nuovo video pubblicato da {video_info['channel_name']}!\n🎥 {video_info['title']}\n🔗 {video_info['link']}")
+
+    # 2. Scaricare trascrizione (se disponibile)
     transcript = get_transcript(video_info["video_id"])
-    summary = get_summary(transcript)
-    send_message_to_channel(summary)
+    
+    if transcript:
+        # 3. Generare il riassunto se c'è la trascrizione
+        summary = get_summary(transcript)
+        send_message_to_channel(summary)
+    else:
+        print(f"⏩ Saltato il riassunto per {video_info['title']} (trascrizione non disponibile)")
+
 
 # -----------------------------------------------------------------------------
 # AVVIO DEL PROCESSO
