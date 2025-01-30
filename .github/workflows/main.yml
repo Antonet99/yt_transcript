@@ -11,16 +11,27 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  # Aggiornato a v4
+        uses: actions/checkout@v4  # Usa la versione aggiornata
 
-      - name: Restore SQLite Database (se esiste)
-        uses: actions/download-artifact@v4  # Aggiornato a v4
+      # 🔹 Tentativo di scaricare l'artifact se esiste, ma non fallire se non lo trova
+      - name: Check for existing SQLite Database
+        id: check-artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
         with:
           name: channel-state-db
           path: .
 
+      # 🔹 Se l'artifact non esiste, crea un database SQLite vuoto
+      - name: Create SQLite Database if not found
+        run: |
+          if [ ! -f channel_state.db ]; then
+            echo "Database non trovato, creando un nuovo database SQLite..."
+            sqlite3 channel_state.db "CREATE TABLE IF NOT EXISTS video_state (channel_id TEXT PRIMARY KEY, last_video_id TEXT);"
+          fi
+
       - name: Setup Python
-        uses: actions/setup-python@v4  # Aggiornato a v4
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
@@ -35,7 +46,7 @@ jobs:
         run: python video_monitor.py
 
       - name: Save SQLite Database
-        uses: actions/upload-artifact@v4  # Aggiornato a v4
+        uses: actions/upload-artifact@v4
         with:
           name: channel-state-db
           path: channel_state.db
