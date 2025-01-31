@@ -1,4 +1,7 @@
-feedparser
-youtube_transcript_api
-google-generativeai
-requests
+psycopg==3.1.18
+feedparser==6.0.11
+requests==2.31.0
+youtube_transcript_api==0.6.2
+google-generativeai==0.3.2
+python-dotenv==1.0.1
+tenacity==8.2.3 
