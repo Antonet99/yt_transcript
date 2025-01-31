@@ -63,6 +63,33 @@ def init_db():
         print(f"❌ Errore durante l'inizializzazione del database: {str(e)}")
         raise
 
+def get_unprocessed_videos():
+    """Recupera i video che sono in video_state ma non hanno una trascrizione in cache"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('''
+                    SELECT vs.last_video_id, vs.channel_name, vs.channel_id
+                    FROM video_state vs
+                    LEFT JOIN transcript_cache tc ON vs.last_video_id = tc.video_id
+                    WHERE tc.video_id IS NULL
+                ''')
+                results = cur.fetchall()
+                
+                if results:
+                    return [{
+                        "video_id": row[0],
+                        "channel_name": row[1],
+                        "channel_id": row[2],
+                        "title": f"Video da {row[1]}",  # Titolo generico per retrocompatibilità
+                        "link": f"https://www.youtube.com/watch?v={row[0]}"  # Generiamo il link dal video_id
+                    } for row in results]
+                return []
+                
+    except (psycopg.Error, DatabaseError) as e:
+        print(f"❌ Errore nel recupero dei video non processati: {str(e)}")
+        return []
+
 def get_last_video_id(channel_id):
     """Recupera l'ultimo video noto per un dato canale"""
     try:
@@ -129,4 +156,34 @@ def cache_transcript(video_id, transcript, summary):
             conn.commit()
     except (psycopg.Error, DatabaseError) as e:
         print(f"❌ Errore nel salvataggio della trascrizione nella cache: {str(e)}")
-        raise 
+        raise
+
+def get_videos_to_reprocess():
+    """Recupera i video che necessitano di essere riprocessati"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Recupera i video che hanno una trascrizione ma un riassunto con errore
+                cur.execute('''
+                    SELECT tc.video_id, tc.transcript, vs.channel_name, vs.channel_id
+                    FROM transcript_cache tc
+                    JOIN video_state vs ON tc.video_id = vs.last_video_id
+                    WHERE tc.summary LIKE '⚠️ Riassunto non disponibile%'
+                    ORDER BY tc.updated_at DESC
+                ''')
+                results = cur.fetchall()
+                
+                if results:
+                    return [{
+                        "video_id": row[0],
+                        "transcript": row[1],
+                        "channel_name": row[2],
+                        "channel_id": row[3],
+                        "title": f"Video da {row[2]}",  # Titolo generico
+                        "link": f"https://www.youtube.com/watch?v={row[0]}"  # Link generato dal video_id
+                    } for row in results]
+                return []
+                
+    except (psycopg.Error, DatabaseError) as e:
+        print(f"❌ Errore nel recupero dei video da riprocessare: {str(e)}")
+        return [] 

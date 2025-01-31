@@ -1,5 +1,5 @@
 import feedparser
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 from youtube_transcript_api.formatters import TextFormatter
 from tenacity import retry, stop_after_attempt, wait_exponential
 from config import CHANNELS
@@ -65,16 +65,36 @@ def poll_channels(channels=CHANNELS):
     
     return new_videos
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def get_transcript(video_id, lang='it'):
-    """Scarica la trascrizione del video con retry"""
+def try_get_transcript_with_lang(video_id, lang):
+    """Prova a ottenere la trascrizione in una specifica lingua"""
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang])
+        print(f"✅ Trascrizione trovata in {lang}")
+        return transcript
+    except (TranscriptsDisabled, NoTranscriptFound):
+        return None
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def get_transcript(video_id, lang='it'):
+    """Scarica la trascrizione del video con retry e fallback su inglese"""
+    try:
+        # Prima prova in italiano
+        transcript = try_get_transcript_with_lang(video_id, 'it')
+        
+        # Se non trova in italiano, prova in inglese
+        if transcript is None:
+            print("⚠️ Trascrizione in italiano non trovata, provo in inglese...")
+            transcript = try_get_transcript_with_lang(video_id, 'en')
+        
+        # Se non trova in nessuna lingua
+        if transcript is None:
+            print(f"❌ Trascrizione non disponibile per il video: https://www.youtube.com/watch?v={video_id}")
+            return None, False
+        
+        # Formatta la trascrizione
         formatter = TextFormatter()
         return formatter.format_transcript(transcript), False
-    except TranscriptsDisabled:
-        print(f"❌ Trascrizione non disponibile per il video: https://www.youtube.com/watch?v={video_id}")
-        return None, False
+        
     except Exception as e:
         print(f"⚠️ Errore nel recuperare la trascrizione per {video_id}: {str(e)}")
         raise YouTubeError(f"Errore nel recupero della trascrizione: {str(e)}") 
